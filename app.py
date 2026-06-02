@@ -1,6 +1,5 @@
 import json
-import os
-import urllib.request
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -10,9 +9,12 @@ from PIL import Image
 
 
 APP_TITLE = "Plant Disease Detection"
+
+MODEL_PATH = Path("plant_disease_model.keras")
+MODEL_H5_FALLBACK_PATH = Path("plant_disease_model.h5")
+TEMP_H5_PATH = Path("/tmp/plant_disease_model_from_keras_name.h5")
+
 CLASS_NAMES_PATH = Path("class_names.json")
-LOCAL_MODEL_PATH = Path("plant_disease_model.h5")
-CACHE_MODEL_PATH = Path("/tmp/plant_disease_model.h5")
 IMAGE_SIZE = (224, 224)
 
 
@@ -57,7 +59,7 @@ def inject_custom_css():
             .block-container {
                 padding-top: 2rem;
                 padding-bottom: 3rem;
-                max-width: 1100px;
+                max-width: 1120px;
             }
 
             .hero-card {
@@ -112,41 +114,49 @@ def inject_custom_css():
     )
 
 
-def get_secret_or_env(key, default=None):
-    try:
-        if key in st.secrets:
-            return st.secrets[key]
-    except Exception:
-        pass
-
-    return os.environ.get(key, default)
+def file_signature(path, size=8):
+    with open(path, "rb") as file:
+        return file.read(size)
 
 
-def download_model_if_needed(model_url):
-    if LOCAL_MODEL_PATH.exists():
-        return LOCAL_MODEL_PATH
+def resolve_model_path():
+    if MODEL_PATH.exists():
+        signature = file_signature(MODEL_PATH)
 
-    if CACHE_MODEL_PATH.exists():
-        return CACHE_MODEL_PATH
+        # Native Keras .keras format is a ZIP archive and starts with PK.
+        if signature.startswith(b"PK"):
+            return MODEL_PATH
 
-    if not model_url:
-        return None
+        # Some training/export pipelines save HDF5 content but give it a .keras name.
+        # Keras may reject that because the extension says .keras. Copy it to .h5 first.
+        if signature.startswith(b"\x89HDF"):
+            shutil.copy2(
+                MODEL_PATH,
+                TEMP_H5_PATH,
+            )
+            return TEMP_H5_PATH
 
-    with st.spinner("Mengunduh model deteksi penyakit tanaman..."):
-        urllib.request.urlretrieve(
-            model_url,
-            CACHE_MODEL_PATH,
-        )
+        return MODEL_PATH
 
-    return CACHE_MODEL_PATH
+    if MODEL_H5_FALLBACK_PATH.exists():
+        return MODEL_H5_FALLBACK_PATH
+
+    available_files = [
+        str(path)
+        for path in Path(".").glob("*")
+    ]
+
+    raise FileNotFoundError(
+        "File model tidak ditemukan. "
+        "Pastikan file model sudah ada di root repository dengan nama "
+        "`plant_disease_model.keras` atau `plant_disease_model.h5`. "
+        f"File yang tersedia saat ini: {available_files}"
+    )
 
 
 @st.cache_resource(show_spinner=False)
-def load_trained_model(model_url):
-    model_path = download_model_if_needed(model_url)
-
-    if model_path is None or not model_path.exists():
-        return None
+def load_trained_model():
+    model_path = resolve_model_path()
 
     model = tf.keras.models.load_model(
         model_path,
@@ -158,6 +168,17 @@ def load_trained_model(model_url):
 
 @st.cache_data
 def load_class_names():
+    if not CLASS_NAMES_PATH.exists():
+        available_files = [
+            str(path)
+            for path in Path(".").glob("*")
+        ]
+
+        raise FileNotFoundError(
+            "File class_names.json tidak ditemukan. "
+            f"File yang tersedia saat ini: {available_files}"
+        )
+
     with open(CLASS_NAMES_PATH, "r", encoding="utf-8") as file:
         names = json.load(file)
 
@@ -229,7 +250,7 @@ def render_hero():
             <div class="hero-title">🌿 Plant Disease Detection</div>
             <p class="hero-subtitle">
                 Deteksi awal penyakit tanaman dari gambar daun. 
-                Anda dapat mengunggah file gambar atau mengambil foto langsung dari kamera.
+                Unggah gambar dari file atau ambil foto langsung melalui kamera.
             </p>
         </div>
         """,
@@ -237,60 +258,32 @@ def render_hero():
     )
 
 
-def render_model_notice():
-    st.warning(
-        "Model belum tersedia di aplikasi. Tambahkan `MODEL_URL` di Streamlit Secrets "
-        "atau upload `plant_disease_model.h5` ke root repository."
-    )
-
-    with st.expander("Cara mengatur MODEL_URL di Streamlit Cloud"):
-        st.markdown(
-            """
-            1. Upload file model `.h5` ke tempat penyimpanan publik, misalnya GitHub Release, Hugging Face, atau cloud storage.
-            2. Salin direct download URL model.
-            3. Di Streamlit Cloud, buka **Manage app → Settings → Secrets**.
-            4. Isi secrets seperti ini:
-
-            ```toml
-            MODEL_URL = "https://direct-link-ke-model/plant_disease_model.h5"
-            ```
-
-            5. Simpan, lalu reboot aplikasi.
-            """
-        )
-
-
 def render_prediction(best_result):
-    plant = best_result["plant"]
-    disease = best_result["disease"]
-    confidence = best_result["confidence"]
-    label = best_result["label"]
-
     st.markdown('<div class="result-card">', unsafe_allow_html=True)
 
-    if is_healthy(label):
+    if is_healthy(best_result["label"]):
         st.success("Tanaman terdeteksi sehat.")
     else:
         st.error("Tanaman terdeteksi memiliki indikasi penyakit.")
 
-    metric_1, metric_2, metric_3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
 
-    with metric_1:
+    with col1:
         st.metric(
             "Tanaman",
-            plant,
+            best_result["plant"],
         )
 
-    with metric_2:
+    with col2:
         st.metric(
             "Diagnosis",
-            disease,
+            best_result["disease"],
         )
 
-    with metric_3:
+    with col3:
         st.metric(
             "Keyakinan",
-            f"{confidence:.2f}%",
+            f"{best_result['confidence']:.2f}%",
         )
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -300,10 +293,16 @@ def render_top_predictions(results):
     st.subheader("Top 5 Prediksi")
 
     for number, item in enumerate(results[:5], start=1):
-        label = f"{number}. {item['plant']} — {item['disease']}"
-        value = max(0.0, min(1.0, item["confidence"] / 100))
+        text = f"{number}. {item['plant']} — {item['disease']}"
+        value = max(
+            0.0,
+            min(
+                1.0,
+                item["confidence"] / 100,
+            ),
+        )
 
-        st.write(f"**{label}**")
+        st.write(f"**{text}**")
         st.progress(
             value,
             text=f"{item['confidence']:.2f}%",
@@ -367,9 +366,9 @@ def main():
     inject_custom_css()
     render_hero()
 
-    class_names = load_class_names()
-    model_url = get_secret_or_env("MODEL_URL")
-    model = load_trained_model(model_url)
+    with st.spinner("Memuat model dan daftar kelas..."):
+        model = load_trained_model()
+        class_names = load_class_names()
 
     left_col, right_col = st.columns(
         [1.05, 0.95],
@@ -379,7 +378,7 @@ def main():
     with left_col:
         st.subheader("Input Gambar")
         st.markdown(
-            '<p class="small-muted">Gunakan gambar daun yang jelas, tidak blur, dan cukup cahaya.</p>',
+            '<p class="small-muted">Gunakan foto daun yang jelas, tidak blur, dan pencahayaan cukup.</p>',
             unsafe_allow_html=True,
         )
 
@@ -395,9 +394,7 @@ def main():
     with right_col:
         st.subheader("Analisis")
 
-        if model is None:
-            render_model_notice()
-        elif image is None:
+        if image is None:
             st.info("Upload gambar atau ambil foto daun terlebih dahulu.")
         else:
             if st.button(
@@ -423,4 +420,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:
+        st.error("Aplikasi gagal dijalankan.")
+        st.exception(error)
