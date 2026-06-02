@@ -1,38 +1,61 @@
-# Plant Disease Detection - Streamlit App
+# Plant Disease Detection - Streamlit Ringan
 
-Aplikasi Streamlit untuk deteksi penyakit tanaman dari gambar daun.
+Paket ini tidak menyertakan file model agar ukuran ZIP/repository lebih ringan.
 
-## Penting untuk Streamlit Community Cloud
+## Fitur
 
-Saat deploy, pilih **Python 3.11** pada **Advanced settings**.
-TensorFlow 2.15 tidak kompatibel dengan Python 3.14, sehingga app akan gagal install dependency jika Python Cloud dibiarkan memakai 3.14.
+- Upload gambar daun dari file.
+- Ambil foto langsung dari kamera.
+- UI lebih rapi.
+- Branding/emblem Streamlit pada header/footer disamarkan melalui CSS.
+- Model dapat dimuat dari:
+  - file lokal `plant_disease_model.h5`, atau
+  - `MODEL_URL` di Streamlit Secrets.
 
-Jika app sudah terlanjur dibuat dengan Python 3.14, hapus app di Streamlit Cloud lalu deploy ulang dengan Python 3.11.
+## Jumlah Kelas
 
-## File utama
+Model menggunakan `class_names.json` berisi 38 kelas penyakit/sehat tanaman.
+
+## Struktur File
 
 ```text
 app.py
-plant_disease_model.keras
 class_names.json
 requirements.txt
+.python-version
 .streamlit/config.toml
+.streamlit/secrets.toml.example
+README.md
 ```
 
-## Cara run lokal
+## Cara Deploy ke Streamlit Community Cloud
+
+1. Upload semua file project ke root repository GitHub.
+2. Deploy app dengan Python 3.11.
+3. Main file path: `app.py`.
+4. Upload model `.h5` ke penyimpanan publik.
+5. Buka **Manage app → Settings → Secrets**.
+6. Isi:
+
+```toml
+MODEL_URL = "https://direct-download-url/plant_disease_model.h5"
+```
+
+7. Save dan reboot app.
+
+## Alternatif
+
+Jika tetap ingin model berada di repository, upload file model dengan nama:
+
+```text
+plant_disease_model.h5
+```
+
+dan letakkan sejajar dengan `app.py`.
+
+## Jalankan Lokal
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-Di Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 streamlit run app.py
 ```
