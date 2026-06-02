@@ -1,5 +1,5 @@
-streamlit>=1.36,<2
-tensorflow==2.21.0
-numpy>=1.26,<3
-pillow>=10,<13
-h5py>=3.12,<4
+streamlit>=1.35,<2
+tensorflow-cpu==2.15.0
+numpy==1.26.4
+pillow==10.3.0
+h5py==3.10.0
