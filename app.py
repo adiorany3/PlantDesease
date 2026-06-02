@@ -26,6 +26,11 @@ DEFAULT_MODEL_URL = (
     "adiorany3/PlantDesease/main/plant_disease_model.keras"
 )
 
+KAGGLE_TRAINING_URL = (
+    "https://www.kaggle.com/code/adioranye/"
+    "plant-disease-detection-by-adioranye"
+)
+
 TEMP_DIR = Path("/tmp/plant_disease_app")
 TEMP_DIR.mkdir(
     parents=True,
@@ -52,6 +57,16 @@ def inject_custom_css():
     st.markdown(
         """
         <style>
+            :root {
+                --brand-green: #1b5e20;
+                --brand-green-2: #2e7d32;
+                --brand-soft: #effaf1;
+                --brand-border: #d8eadb;
+                --text-main: #1f2d22;
+                --text-muted: #607064;
+                --card-shadow: 0 8px 26px rgba(46, 125, 50, 0.08);
+            }
+
             #MainMenu {
                 visibility: hidden;
             }
@@ -79,56 +94,163 @@ def inject_custom_css():
             }
 
             .block-container {
-                padding-top: 2rem;
-                padding-bottom: 3rem;
-                max-width: 1120px;
+                padding-top: 1.6rem;
+                padding-bottom: 2.5rem;
+                max-width: 1180px;
             }
 
             .hero-card {
-                padding: 1.6rem 1.8rem;
-                border-radius: 1.4rem;
+                padding: clamp(1rem, 3vw, 1.8rem);
+                border-radius: clamp(1rem, 2vw, 1.5rem);
                 background: linear-gradient(135deg, #effaf1 0%, #ffffff 55%, #e8f5e9 100%);
-                border: 1px solid #d8eadb;
-                box-shadow: 0 8px 26px rgba(46, 125, 50, 0.08);
-                margin-bottom: 1.2rem;
+                border: 1px solid var(--brand-border);
+                box-shadow: var(--card-shadow);
+                margin-bottom: 1.1rem;
             }
 
             .hero-title {
-                font-size: 2.25rem;
-                font-weight: 800;
-                color: #1b5e20;
-                margin-bottom: 0.25rem;
+                font-size: clamp(1.65rem, 4vw, 2.45rem);
+                font-weight: 850;
+                color: var(--brand-green);
+                margin-bottom: 0.35rem;
+                line-height: 1.15;
+                letter-spacing: -0.02em;
             }
 
             .hero-subtitle {
-                font-size: 1.02rem;
+                font-size: clamp(0.92rem, 2.2vw, 1.04rem);
                 color: #3f4f42;
                 line-height: 1.7;
                 margin-bottom: 0;
+                max-width: 860px;
             }
 
-            .result-card {
-                padding: 1.2rem;
+            .section-card {
+                padding: clamp(0.9rem, 2.2vw, 1.2rem);
                 border-radius: 1.2rem;
                 border: 1px solid #dceee0;
                 background-color: #ffffff;
                 box-shadow: 0 6px 20px rgba(0, 0, 0, 0.045);
+                margin-bottom: 1rem;
+            }
+
+            .result-card {
+                padding: clamp(0.9rem, 2.2vw, 1.2rem);
+                border-radius: 1.2rem;
+                border: 1px solid #dceee0;
+                background-color: #ffffff;
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.045);
+                margin-top: 0.5rem;
             }
 
             .small-muted {
-                color: #637067;
-                font-size: 0.9rem;
+                color: var(--text-muted);
+                font-size: clamp(0.84rem, 1.9vw, 0.93rem);
+                line-height: 1.6;
             }
 
             .stButton > button {
                 border-radius: 999px;
-                font-weight: 700;
-                padding-left: 1.3rem;
-                padding-right: 1.3rem;
+                font-weight: 750;
+                min-height: 2.75rem;
             }
 
             .stFileUploader, [data-testid="stCameraInput"] {
                 border-radius: 1rem;
+            }
+
+            [data-testid="stImage"] img {
+                border-radius: 1rem;
+                border: 1px solid #e3efe5;
+            }
+
+            div[data-testid="stMetric"] {
+                background: #f8fcf8;
+                border: 1px solid #e0eee2;
+                padding: 0.85rem 0.9rem;
+                border-radius: 1rem;
+            }
+
+            div[data-testid="stMetric"] label {
+                color: var(--text-muted);
+            }
+
+            .custom-footer {
+                margin-top: 2rem;
+                padding: 1rem 1.2rem;
+                border-top: 1px solid #dceee0;
+                text-align: center;
+                color: #4f6254;
+                font-size: clamp(0.78rem, 1.8vw, 0.92rem);
+                line-height: 1.7;
+            }
+
+            .custom-footer a {
+                color: var(--brand-green-2);
+                font-weight: 700;
+                text-decoration: none;
+            }
+
+            .custom-footer a:hover {
+                text-decoration: underline;
+            }
+
+            @media screen and (max-width: 900px) {
+                .block-container {
+                    padding-left: 1rem;
+                    padding-right: 1rem;
+                    padding-top: 1rem;
+                }
+
+                .hero-card {
+                    margin-bottom: 0.8rem;
+                }
+
+                .section-card,
+                .result-card {
+                    border-radius: 1rem;
+                }
+            }
+
+            @media screen and (max-width: 640px) {
+                .block-container {
+                    padding-left: 0.75rem;
+                    padding-right: 0.75rem;
+                    padding-bottom: 1.5rem;
+                }
+
+                .hero-card {
+                    padding: 1rem;
+                    border-radius: 1rem;
+                }
+
+                .hero-title {
+                    font-size: 1.55rem;
+                }
+
+                .hero-subtitle {
+                    font-size: 0.9rem;
+                    line-height: 1.55;
+                }
+
+                .stTabs [data-baseweb="tab-list"] {
+                    gap: 0.35rem;
+                }
+
+                .stTabs [data-baseweb="tab"] {
+                    padding-left: 0.55rem;
+                    padding-right: 0.55rem;
+                    font-size: 0.85rem;
+                }
+
+                div[data-testid="stMetric"] {
+                    padding: 0.72rem;
+                }
+
+                .custom-footer {
+                    padding-left: 0.5rem;
+                    padding-right: 0.5rem;
+                }
             }
         </style>
         """,
@@ -253,8 +375,6 @@ def resolve_model_path():
         if local_format in ["keras_zip", "hdf5"]:
             return make_keras_loadable_path(local_model_path)
 
-        # Git LFS pointer, HTML, or corrupt file:
-        # keep the repo lightweight, but try to fetch the true raw model at runtime.
         if model_url:
             downloaded_path = download_model_from_url(model_url)
             downloaded_format = detect_model_format(downloaded_path)
@@ -434,25 +554,22 @@ def render_prediction(best_result):
     else:
         st.error("Tanaman terdeteksi memiliki indikasi penyakit.")
 
-    col1, col2, col3 = st.columns(3)
+    metric_cols = st.columns(3)
 
-    with col1:
-        st.metric(
-            "Tanaman",
-            best_result["plant"],
-        )
+    metric_cols[0].metric(
+        "Tanaman",
+        best_result["plant"],
+    )
 
-    with col2:
-        st.metric(
-            "Diagnosis",
-            best_result["disease"],
-        )
+    metric_cols[1].metric(
+        "Diagnosis",
+        best_result["disease"],
+    )
 
-    with col3:
-        st.metric(
-            "Keyakinan",
-            f"{best_result['confidence']:.2f}%",
-        )
+    metric_cols[2].metric(
+        "Keyakinan",
+        f"{best_result['confidence']:.2f}%",
+    )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -530,6 +647,20 @@ def get_input_image():
     return image
 
 
+def render_footer():
+    st.markdown(
+        f"""
+        <div class="custom-footer">
+            Developed by <strong>Galuh Adi Insani</strong>, training with
+            <a href="{KAGGLE_TRAINING_URL}" target="_blank" rel="noopener noreferrer">
+                Kaggle
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def main():
     inject_custom_css()
     render_hero()
@@ -543,6 +674,7 @@ def main():
     except Exception as error:
         render_model_error(error)
         render_supported_classes(class_names)
+        render_footer()
         return
 
     left_col, right_col = st.columns(
@@ -551,6 +683,7 @@ def main():
     )
 
     with left_col:
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Input Gambar")
         st.markdown(
             '<p class="small-muted">Gunakan foto daun yang jelas, tidak blur, dan pencahayaan cukup.</p>',
@@ -566,7 +699,10 @@ def main():
                 use_container_width=True,
             )
 
+        st.markdown("</div>", unsafe_allow_html=True)
+
     with right_col:
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Analisis")
 
         if image is None:
@@ -587,11 +723,13 @@ def main():
                 render_prediction(results[0])
                 render_top_predictions(results)
 
-    render_supported_classes(class_names)
+        st.markdown("</div>", unsafe_allow_html=True)
 
+    render_supported_classes(class_names)
     st.caption(
         "Catatan: hasil prediksi adalah bantuan awal berbasis model dan bukan pengganti pemeriksaan ahli pertanian."
     )
+    render_footer()
 
 
 if __name__ == "__main__":
