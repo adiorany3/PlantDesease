@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import urllib.request
+from collections import defaultdict
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -58,13 +59,54 @@ def inject_custom_css():
         """
         <style>
             :root {
-                --brand-green: #1b5e20;
-                --brand-green-2: #2e7d32;
-                --brand-soft: #effaf1;
-                --brand-border: #d8eadb;
-                --text-main: #1f2d22;
-                --text-muted: #607064;
-                --card-shadow: 0 8px 26px rgba(46, 125, 50, 0.08);
+                color-scheme: light dark;
+
+                --app-bg: #f7fbf7;
+                --app-surface: #ffffff;
+                --app-surface-2: #f1f8f2;
+                --app-text: #17231a;
+                --app-text-soft: #405047;
+                --app-muted: #607064;
+                --app-border: #d7eadb;
+                --app-border-strong: #b9d9bf;
+                --app-primary: #1b5e20;
+                --app-primary-2: #2e7d32;
+                --app-primary-soft: #e8f5e9;
+                --app-shadow: 0 10px 28px rgba(31, 93, 37, 0.10);
+                --app-danger-bg: #fff3f2;
+                --app-danger-border: #ffc9c4;
+                --app-success-bg: #eef9f0;
+                --app-success-border: #bfe7c7;
+                --app-warning-bg: #fff8e5;
+                --app-warning-border: #ead083;
+            }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --app-bg: #0e1510;
+                    --app-surface: #151f18;
+                    --app-surface-2: #19261d;
+                    --app-text: #edf7ef;
+                    --app-text-soft: #c9d9cd;
+                    --app-muted: #a7b9ab;
+                    --app-border: #2e4734;
+                    --app-border-strong: #3e6047;
+                    --app-primary: #8ee59a;
+                    --app-primary-2: #6fd47d;
+                    --app-primary-soft: #16331c;
+                    --app-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+                    --app-danger-bg: #3a1717;
+                    --app-danger-border: #7a3333;
+                    --app-success-bg: #12361a;
+                    --app-success-border: #2d7540;
+                    --app-warning-bg: #3c2f10;
+                    --app-warning-border: #82682b;
+                }
+            }
+
+            html, body, [data-testid="stAppViewContainer"] {
+                background: var(--app-bg);
+                color: var(--app-text);
             }
 
             #MainMenu {
@@ -94,24 +136,35 @@ def inject_custom_css():
             }
 
             .block-container {
-                padding-top: 1.6rem;
+                padding-top: 1.5rem;
                 padding-bottom: 2.5rem;
                 max-width: 1180px;
+            }
+
+            .hero-card,
+            .section-card,
+            .result-card,
+            .insight-card,
+            .custom-footer {
+                background: var(--app-surface);
+                color: var(--app-text);
+                border: 1px solid var(--app-border);
+                box-shadow: var(--app-shadow);
             }
 
             .hero-card {
                 padding: clamp(1rem, 3vw, 1.8rem);
                 border-radius: clamp(1rem, 2vw, 1.5rem);
-                background: linear-gradient(135deg, #effaf1 0%, #ffffff 55%, #e8f5e9 100%);
-                border: 1px solid var(--brand-border);
-                box-shadow: var(--card-shadow);
+                background:
+                    radial-gradient(circle at top left, var(--app-primary-soft), transparent 36%),
+                    linear-gradient(135deg, var(--app-surface-2) 0%, var(--app-surface) 62%);
                 margin-bottom: 1.1rem;
             }
 
             .hero-title {
                 font-size: clamp(1.65rem, 4vw, 2.45rem);
                 font-weight: 850;
-                color: var(--brand-green);
+                color: var(--app-primary);
                 margin-bottom: 0.35rem;
                 line-height: 1.15;
                 letter-spacing: -0.02em;
@@ -119,34 +172,64 @@ def inject_custom_css():
 
             .hero-subtitle {
                 font-size: clamp(0.92rem, 2.2vw, 1.04rem);
-                color: #3f4f42;
+                color: var(--app-text-soft);
                 line-height: 1.7;
                 margin-bottom: 0;
-                max-width: 860px;
+                max-width: 880px;
             }
 
-            .section-card {
+            .section-card,
+            .result-card,
+            .insight-card {
                 padding: clamp(0.9rem, 2.2vw, 1.2rem);
                 border-radius: 1.2rem;
-                border: 1px solid #dceee0;
-                background-color: #ffffff;
-                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.045);
                 margin-bottom: 1rem;
             }
 
-            .result-card {
-                padding: clamp(0.9rem, 2.2vw, 1.2rem);
-                border-radius: 1.2rem;
-                border: 1px solid #dceee0;
-                background-color: #ffffff;
-                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.045);
-                margin-top: 0.5rem;
+            .insight-card {
+                background:
+                    linear-gradient(135deg, var(--app-surface) 0%, var(--app-surface-2) 100%);
             }
 
-            .small-muted {
-                color: var(--text-muted);
+            .small-muted,
+            .insight-text {
+                color: var(--app-muted);
                 font-size: clamp(0.84rem, 1.9vw, 0.93rem);
-                line-height: 1.6;
+                line-height: 1.65;
+            }
+
+            .insight-title {
+                color: var(--app-primary);
+                font-weight: 800;
+                margin-bottom: 0.35rem;
+                font-size: 1rem;
+            }
+
+            .insight-list {
+                margin-top: 0.2rem;
+                margin-bottom: 0;
+                color: var(--app-text-soft);
+                line-height: 1.65;
+            }
+
+            .badge-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.55rem;
+                margin-top: 0.8rem;
+            }
+
+            .badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.45rem 0.72rem;
+                border-radius: 999px;
+                background: var(--app-surface-2);
+                color: var(--app-text);
+                border: 1px solid var(--app-border);
+                font-size: 0.88rem;
+                font-weight: 700;
             }
 
             .stButton > button {
@@ -161,38 +244,54 @@ def inject_custom_css():
 
             [data-testid="stImage"] img {
                 border-radius: 1rem;
-                border: 1px solid #e3efe5;
+                border: 1px solid var(--app-border);
             }
 
             div[data-testid="stMetric"] {
-                background: #f8fcf8;
-                border: 1px solid #e0eee2;
+                background: var(--app-surface-2);
+                border: 1px solid var(--app-border);
                 padding: 0.85rem 0.9rem;
                 border-radius: 1rem;
+                color: var(--app-text);
             }
 
             div[data-testid="stMetric"] label {
-                color: var(--text-muted);
+                color: var(--app-muted) !important;
+            }
+
+            div[data-testid="stMetricValue"] {
+                color: var(--app-text) !important;
+                font-size: clamp(1rem, 2vw, 1.25rem);
             }
 
             .custom-footer {
                 margin-top: 2rem;
                 padding: 1rem 1.2rem;
-                border-top: 1px solid #dceee0;
+                border-radius: 1rem;
                 text-align: center;
-                color: #4f6254;
+                color: var(--app-text-soft);
                 font-size: clamp(0.78rem, 1.8vw, 0.92rem);
                 line-height: 1.7;
             }
 
             .custom-footer a {
-                color: var(--brand-green-2);
-                font-weight: 700;
+                color: var(--app-primary);
+                font-weight: 800;
                 text-decoration: none;
             }
 
             .custom-footer a:hover {
                 text-decoration: underline;
+            }
+
+            .stAlert {
+                color: var(--app-text);
+            }
+
+            [data-testid="stExpander"] {
+                border-color: var(--app-border) !important;
+                background: var(--app-surface) !important;
+                color: var(--app-text) !important;
             }
 
             @media screen and (max-width: 900px) {
@@ -207,8 +306,13 @@ def inject_custom_css():
                 }
 
                 .section-card,
-                .result-card {
+                .result-card,
+                .insight-card {
                     border-radius: 1rem;
+                }
+
+                .badge-row {
+                    gap: 0.45rem;
                 }
             }
 
@@ -248,8 +352,13 @@ def inject_custom_css():
                 }
 
                 .custom-footer {
-                    padding-left: 0.5rem;
-                    padding-right: 0.5rem;
+                    padding-left: 0.75rem;
+                    padding-right: 0.75rem;
+                }
+
+                .badge {
+                    font-size: 0.8rem;
+                    padding: 0.38rem 0.58rem;
                 }
             }
         </style>
@@ -507,6 +616,34 @@ def predict(model, image, class_names):
     return results
 
 
+def summarize_classes(class_names):
+    grouped = defaultdict(list)
+
+    for label in class_names:
+        plant, disease = split_label(label)
+        grouped[plant].append(disease)
+
+    healthy_classes = [
+        label
+        for label in class_names
+        if is_healthy(label)
+    ]
+
+    disease_classes = [
+        label
+        for label in class_names
+        if not is_healthy(label)
+    ]
+
+    top_plants = sorted(
+        grouped.items(),
+        key=lambda item: len(item[1]),
+        reverse=True,
+    )[:5]
+
+    return grouped, healthy_classes, disease_classes, top_plants
+
+
 def render_hero():
     st.markdown(
         """
@@ -544,6 +681,110 @@ def render_model_error(error):
             - HDF5 `.h5`, termasuk file HDF5 yang namanya masih `.keras`
             """
         )
+
+
+def render_dataset_insights(class_names):
+    grouped, healthy_classes, disease_classes, top_plants = summarize_classes(class_names)
+
+    st.markdown('<div class="insight-card">', unsafe_allow_html=True)
+    st.subheader("Insight Model")
+
+    badge_html = f"""
+    <div class="badge-row">
+        <span class="badge">🌱 {len(grouped)} tanaman</span>
+        <span class="badge">🧪 {len(class_names)} kelas</span>
+        <span class="badge">🩺 {len(disease_classes)} kelas penyakit</span>
+        <span class="badge">✅ {len(healthy_classes)} kelas sehat</span>
+    </div>
+    """
+
+    st.markdown(
+        badge_html,
+        unsafe_allow_html=True,
+    )
+
+    top_plant_text = ", ".join(
+        [
+            f"{plant} ({len(diseases)} kelas)"
+            for plant, diseases in top_plants
+        ]
+    )
+
+    st.markdown(
+        f"""
+        <p class="insight-text">
+            Model ini paling banyak memiliki variasi kelas pada: <strong>{top_plant_text}</strong>.
+            Semakin mirip tanaman pada gambar dengan kelas yang tersedia, semakin relevan hasil prediksi.
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_prediction_insights(best_result, second_result=None):
+    confidence = best_result["confidence"]
+    label = best_result["label"]
+
+    if confidence >= 85:
+        confidence_text = (
+            "Confidence tinggi. Hasil ini cukup kuat sebagai deteksi awal, "
+            "dengan catatan foto sesuai pola dataset pelatihan."
+        )
+    elif confidence >= 60:
+        confidence_text = (
+            "Confidence sedang. Sebaiknya cek top prediksi lain dan ulangi foto "
+            "dengan pencahayaan lebih baik."
+        )
+    else:
+        confidence_text = (
+            "Confidence rendah. Model belum yakin; gunakan foto daun yang lebih dekat, "
+            "lebih tajam, dan latar belakang lebih sederhana."
+        )
+
+    if is_healthy(label):
+        status_text = (
+            "Prediksi utama adalah kelas sehat. Tetap periksa gejala visual seperti bercak, "
+            "perubahan warna, atau daun mengering jika kondisi lapangan meragukan."
+        )
+    else:
+        status_text = (
+            "Prediksi utama mengarah ke penyakit. Gunakan hasil ini sebagai prioritas awal "
+            "untuk pemeriksaan lebih lanjut, bukan diagnosis final."
+        )
+
+    gap_text = ""
+
+    if second_result is not None:
+        gap = confidence - second_result["confidence"]
+
+        if gap < 10:
+            gap_text = (
+                f"Selisih dengan prediksi kedua hanya {gap:.2f}%. "
+                "Artinya beberapa kelas terlihat mirip bagi model."
+            )
+        else:
+            gap_text = (
+                f"Selisih dengan prediksi kedua {gap:.2f}%, sehingga prediksi utama "
+                "lebih dominan dibanding alternatif berikutnya."
+            )
+
+    st.markdown('<div class="insight-card">', unsafe_allow_html=True)
+    st.subheader("Insight Hasil")
+
+    st.markdown(
+        f"""
+        <ul class="insight-list">
+            <li>{confidence_text}</li>
+            <li>{status_text}</li>
+            <li>{gap_text}</li>
+        </ul>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_prediction(best_result):
@@ -596,16 +837,7 @@ def render_top_predictions(results):
 
 def render_supported_classes(class_names):
     with st.expander("Daftar tanaman dan penyakit yang didukung"):
-        grouped = {}
-
-        for label in class_names:
-            plant, disease = split_label(label)
-
-            if plant not in grouped:
-                grouped[plant] = []
-
-            grouped[plant].append(disease)
-
+        grouped, _, _, _ = summarize_classes(class_names)
         columns = st.columns(2)
 
         for index, plant in enumerate(sorted(grouped.keys())):
@@ -666,6 +898,7 @@ def main():
     render_hero()
 
     class_names = load_class_names()
+    render_dataset_insights(class_names)
 
     try:
         with st.spinner("Memuat model deteksi..."):
@@ -686,7 +919,7 @@ def main():
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Input Gambar")
         st.markdown(
-            '<p class="small-muted">Gunakan foto daun yang jelas, tidak blur, dan pencahayaan cukup.</p>',
+            '<p class="small-muted">Gunakan foto daun yang jelas, tidak blur, pencahayaan cukup, dan fokus pada area daun.</p>',
             unsafe_allow_html=True,
         )
 
@@ -721,6 +954,10 @@ def main():
                     )
 
                 render_prediction(results[0])
+
+                second_result = results[1] if len(results) > 1 else None
+                render_prediction_insights(results[0], second_result)
+
                 render_top_predictions(results)
 
         st.markdown("</div>", unsafe_allow_html=True)
