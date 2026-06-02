@@ -1,6 +1,9 @@
 import json
+import os
 import shutil
+import urllib.request
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 import numpy as np
 import streamlit as st
@@ -10,12 +13,27 @@ from PIL import Image
 
 APP_TITLE = "Plant Disease Detection"
 
-MODEL_PATH = Path("plant_disease_model.keras")
-MODEL_H5_FALLBACK_PATH = Path("plant_disease_model.h5")
-TEMP_H5_PATH = Path("/tmp/plant_disease_model_from_keras_name.h5")
-
 CLASS_NAMES_PATH = Path("class_names.json")
 IMAGE_SIZE = (224, 224)
+
+LOCAL_MODEL_CANDIDATES = [
+    Path("plant_disease_model.keras"),
+    Path("plant_disease_model.h5"),
+]
+
+DEFAULT_MODEL_URL = (
+    "https://raw.githubusercontent.com/"
+    "adiorany3/PlantDesease/main/plant_disease_model.keras"
+)
+
+TEMP_DIR = Path("/tmp/plant_disease_app")
+TEMP_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+DOWNLOADED_MODEL_PATH = TEMP_DIR / "plant_disease_model_downloaded.keras"
+TEMP_H5_PATH = TEMP_DIR / "plant_disease_model_loaded_as_h5.h5"
 
 
 st.set_page_config(
@@ -24,6 +42,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+
+class InvalidModelFileError(Exception):
+    pass
 
 
 def inject_custom_css():
@@ -114,32 +136,154 @@ def inject_custom_css():
     )
 
 
-def file_signature(path, size=8):
+def get_secret_or_env(key, default=None):
+    try:
+        if key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
+
+    return os.environ.get(key, default)
+
+
+def read_file_head(path, size=512):
     with open(path, "rb") as file:
         return file.read(size)
 
 
+def detect_model_format(path):
+    if not path.exists():
+        return "missing"
+
+    head = read_file_head(path)
+
+    if len(head) == 0:
+        return "empty"
+
+    if head.startswith(b"PK"):
+        return "keras_zip"
+
+    if head.startswith(b"\x89HDF"):
+        return "hdf5"
+
+    if head.startswith(b"version https://git-lfs.github.com/spec/v1"):
+        return "git_lfs_pointer"
+
+    stripped = head.lstrip().lower()
+
+    if stripped.startswith(b"<!doctype html") or stripped.startswith(b"<html"):
+        return "html"
+
+    if stripped.startswith(b"{") or stripped.startswith(b"["):
+        return "json_or_text"
+
+    return "unknown"
+
+
+def make_keras_loadable_path(path):
+    detected_format = detect_model_format(path)
+
+    if detected_format == "keras_zip":
+        return path
+
+    if detected_format == "hdf5":
+        shutil.copy2(
+            path,
+            TEMP_H5_PATH,
+        )
+
+        return TEMP_H5_PATH
+
+    raise InvalidModelFileError(
+        f"File model tidak valid: {path}. "
+        f"Format terdeteksi: {detected_format}. "
+        "File model harus berupa Keras `.keras` zip atau HDF5 `.h5`."
+    )
+
+
+def find_local_model_path():
+    for candidate in LOCAL_MODEL_CANDIDATES:
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
+def download_model_from_url(model_url):
+    if DOWNLOADED_MODEL_PATH.exists():
+        detected_format = detect_model_format(DOWNLOADED_MODEL_PATH)
+
+        if detected_format in ["keras_zip", "hdf5"]:
+            return DOWNLOADED_MODEL_PATH
+
+        DOWNLOADED_MODEL_PATH.unlink()
+
+    try:
+        with urllib.request.urlopen(model_url, timeout=120) as response:
+            with open(DOWNLOADED_MODEL_PATH, "wb") as output_file:
+                shutil.copyfileobj(
+                    response,
+                    output_file,
+                )
+
+    except HTTPError as error:
+        raise InvalidModelFileError(
+            f"Gagal mengunduh model dari MODEL_URL. HTTP error: {error.code}."
+        ) from error
+
+    except URLError as error:
+        raise InvalidModelFileError(
+            f"Gagal mengunduh model dari MODEL_URL. Detail: {error}."
+        ) from error
+
+    return DOWNLOADED_MODEL_PATH
+
+
 def resolve_model_path():
-    if MODEL_PATH.exists():
-        signature = file_signature(MODEL_PATH)
+    model_url = get_secret_or_env(
+        "MODEL_URL",
+        DEFAULT_MODEL_URL,
+    )
 
-        # Native Keras .keras format is a ZIP archive and starts with PK.
-        if signature.startswith(b"PK"):
-            return MODEL_PATH
+    local_model_path = find_local_model_path()
 
-        # Some training/export pipelines save HDF5 content but give it a .keras name.
-        # Keras may reject that because the extension says .keras. Copy it to .h5 first.
-        if signature.startswith(b"\x89HDF"):
-            shutil.copy2(
-                MODEL_PATH,
-                TEMP_H5_PATH,
+    if local_model_path is not None:
+        local_format = detect_model_format(local_model_path)
+
+        if local_format in ["keras_zip", "hdf5"]:
+            return make_keras_loadable_path(local_model_path)
+
+        # Git LFS pointer, HTML, or corrupt file:
+        # keep the repo lightweight, but try to fetch the true raw model at runtime.
+        if model_url:
+            downloaded_path = download_model_from_url(model_url)
+            downloaded_format = detect_model_format(downloaded_path)
+
+            if downloaded_format in ["keras_zip", "hdf5"]:
+                return make_keras_loadable_path(downloaded_path)
+
+            raise InvalidModelFileError(
+                "File model lokal dan file hasil download sama-sama tidak valid. "
+                f"Format lokal: {local_format}. "
+                f"Format download: {downloaded_format}. "
+                "Jika file lokal adalah Git LFS pointer, pastikan Git LFS quota/bandwidth masih tersedia, "
+                "atau upload model ke GitHub Release/Hugging Face lalu set MODEL_URL di Streamlit Secrets."
             )
-            return TEMP_H5_PATH
 
-        return MODEL_PATH
+        raise InvalidModelFileError(
+            f"File model lokal ditemukan tetapi tidak valid. Format: {local_format}."
+        )
 
-    if MODEL_H5_FALLBACK_PATH.exists():
-        return MODEL_H5_FALLBACK_PATH
+    if model_url:
+        downloaded_path = download_model_from_url(model_url)
+        downloaded_format = detect_model_format(downloaded_path)
+
+        if downloaded_format in ["keras_zip", "hdf5"]:
+            return make_keras_loadable_path(downloaded_path)
+
+        raise InvalidModelFileError(
+            f"File hasil download dari MODEL_URL tidak valid. Format: {downloaded_format}."
+        )
 
     available_files = [
         str(path)
@@ -148,9 +292,9 @@ def resolve_model_path():
 
     raise FileNotFoundError(
         "File model tidak ditemukan. "
-        "Pastikan file model sudah ada di root repository dengan nama "
-        "`plant_disease_model.keras` atau `plant_disease_model.h5`. "
-        f"File yang tersedia saat ini: {available_files}"
+        "Pastikan `plant_disease_model.keras` ada di root repository, "
+        "atau isi MODEL_URL di Streamlit Secrets. "
+        f"File yang tersedia: {available_files}"
     )
 
 
@@ -176,7 +320,7 @@ def load_class_names():
 
         raise FileNotFoundError(
             "File class_names.json tidak ditemukan. "
-            f"File yang tersedia saat ini: {available_files}"
+            f"File yang tersedia: {available_files}"
         )
 
     with open(CLASS_NAMES_PATH, "r", encoding="utf-8") as file:
@@ -256,6 +400,30 @@ def render_hero():
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_model_error(error):
+    st.error("Model belum dapat dimuat.")
+    st.exception(error)
+
+    with st.expander("Cara memperbaiki file model"):
+        st.markdown(
+            """
+            Periksa salah satu opsi berikut:
+
+            1. Pastikan `plant_disease_model.keras` di GitHub adalah file model asli, bukan Git LFS pointer.
+            2. Jika memakai Git LFS, pastikan bandwidth/quota Git LFS belum habis.
+            3. Cara paling stabil: upload model ke GitHub Release atau Hugging Face, lalu isi Streamlit Secrets:
+
+            ```toml
+            MODEL_URL = "https://direct-download-url/plant_disease_model.keras"
+            ```
+
+            Aplikasi ini bisa membaca:
+            - native Keras `.keras` zip
+            - HDF5 `.h5`, termasuk file HDF5 yang namanya masih `.keras`
+            """
+        )
 
 
 def render_prediction(best_result):
@@ -366,9 +534,16 @@ def main():
     inject_custom_css()
     render_hero()
 
-    with st.spinner("Memuat model dan daftar kelas..."):
-        model = load_trained_model()
-        class_names = load_class_names()
+    class_names = load_class_names()
+
+    try:
+        with st.spinner("Memuat model deteksi..."):
+            model = load_trained_model()
+
+    except Exception as error:
+        render_model_error(error)
+        render_supported_classes(class_names)
+        return
 
     left_col, right_col = st.columns(
         [1.05, 0.95],
@@ -420,8 +595,4 @@ def main():
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as error:
-        st.error("Aplikasi gagal dijalankan.")
-        st.exception(error)
+    main()
